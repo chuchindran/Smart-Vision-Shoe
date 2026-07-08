@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0A0E13">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PATHSCAN">
+<title>PATHSCAN — Vision Shoe Obstacle Scanner</title>
+<style>
+  :root{
+    --bg:#0A0E13;
+    --surface:#11161D;
+    --surface-2:#171E27;
+    --line:#232C38;
+    --text:#E7EDF3;
+    --text-dim:#7C8894;
+    --cyan:#00D9C0;
+    --cyan-dim:#0A5C52;
+    --amber:#FFB020;
+    --red:#FF4757;
+    --green:#3DDC84;
+    --mono:'JetBrains Mono','Courier New',monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  }
+
+  *{box-sizing:border-box; margin:0; padding:0;}
+
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:24px 16px 60px;
+    padding-top:max(24px, env(safe-area-inset-top));
+    padding-bottom:max(60px, env(safe-area-inset-bottom));
+    padding-left:max(16px, env(safe-area-inset-left));
+    padding-right:max(16px, env(safe-area-inset-right));
+  }
+
+  header{
+    width:100%;
+    max-width:1100px;
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px 14px;
+    justify-content:space-between;
+    align-items:flex-end;
+    margin-bottom:20px;
+    border-bottom:1px solid var(--line);
+    padding-bottom:16px;
+  }
+
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+
+  .brand-mark{
+    width:34px; height:34px;
+    border:1.5px solid var(--cyan);
+    border-radius:50%;
+    position:relative;
+    flex-shrink:0;
+  }
+  .brand-mark::before{
+    content:'';
+    position:absolute;
+    top:50%; left:50%;
+    width:8px; height:8px;
+    background:var(--cyan);
+    border-radius:50%;
+    transform:translate(-50%,-50%);
+    box-shadow:0 0 10px var(--cyan);
+    animation:pulse-dot 2s ease-in-out infinite;
+  }
+  @keyframes pulse-dot{
+    0%,100%{opacity:1;}
+    50%{opacity:.3;}
+  }
+
+  h1{
+    font-family:var(--mono);
+    font-size:22px;
+    letter-spacing:0.08em;
+    font-weight:700;
+  }
+  h1 span{ color:var(--cyan); }
+
+  .tagline{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--text-dim);
+    letter-spacing:0.04em;
+    margin-top:2px;
+  }
+
+  .status-chip{
+    font-family:var(--mono);
+    font-size:11px;
+    padding:6px 12px;
+    border-radius:100px;
+    border:1px solid var(--line);
+    color:var(--text-dim);
+    display:flex;
+    align-items:center;
+    gap:7px;
+  }
+  .status-chip .dot{
+    width:7px; height:7px;
+    border-radius:50%;
+    background:var(--text-dim);
+  }
+  .status-chip.live{ color:var(--green); border-color:var(--cyan-dim); }
+  .status-chip.live .dot{ background:var(--green); box-shadow:0 0 6px var(--green); }
+
+  main{
+    width:100%;
+    max-width:1100px;
+    display:grid;
+    grid-template-columns:1.6fr 1fr;
+    gap:20px;
+  }
+  @media (max-width:820px){
+    main{ grid-template-columns:1fr; }
+  }
+  @media (max-width:480px){
+    body{ padding:16px 10px 40px; }
+    h1{ font-size:18px; }
+    .tagline{ font-size:10px; }
+    .zones{ grid-template-columns:1fr 1fr 1fr; gap:6px; }
+    .zone{ padding:10px 4px; }
+    .zone-state{ font-size:12px; }
+    .settings-card .setting-row{ flex-wrap:wrap; gap:4px; }
+    .setting-row input[type=range]{ width:100%; }
+    .toggle-btn{ font-size:10px; padding:8px 10px; }
+    .start-btn{ width:100%; }
+  }
+
+  .viewport-card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:10px;
+    overflow:hidden;
+    position:relative;
+  }
+
+  .viewport-wrap{
+    position:relative;
+    width:100%;
+    aspect-ratio:4/3;
+    background:#000;
+    overflow:hidden;
+  }
+
+  video, canvas.overlay{
+    position:absolute;
+    top:0; left:0;
+    width:100%; height:100%;
+    object-fit:cover;
+  }
+  video{ transform:scaleX(-1); }
+
+  .corner{
+    position:absolute;
+    width:26px; height:26px;
+    border:2px solid var(--cyan);
+    opacity:.85;
+    z-index:2;
+  }
+  .corner.tl{ top:10px; left:10px; border-right:none; border-bottom:none; }
+  .corner.tr{ top:10px; right:10px; border-left:none; border-bottom:none; }
+  .corner.bl{ bottom:10px; left:10px; border-right:none; border-top:none; }
+  .corner.br{ bottom:10px; right:10px; border-left:none; border-top:none; }
+
+  .placeholder{
+    position:absolute;
+    inset:0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:14px;
+    color:var(--text-dim);
+    font-family:var(--mono);
+    font-size:12px;
+    text-align:center;
+    padding:20px;
+    z-index:3;
+    background:var(--surface);
+  }
+  .placeholder.hidden{ display:none; }
+
+  .start-btn{
+    background:var(--cyan);
+    color:#001612;
+    border:none;
+    font-family:var(--mono);
+    font-weight:700;
+    font-size:13px;
+    letter-spacing:0.04em;
+    padding:12px 26px;
+    border-radius:6px;
+    cursor:pointer;
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .start-btn:hover{ transform:translateY(-1px); box-shadow:0 4px 18px rgba(0,217,192,.35); }
+  .start-btn:active{ transform:translateY(0); }
+
+  .viewport-footer{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:space-between;
+    align-items:center;
+    gap:8px 10px;
+    padding:10px 14px;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--text-dim);
+    border-top:1px solid var(--line);
+  }
+
+  .toggle-btn{
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--text-dim);
+    font-family:var(--mono);
+    font-size:11px;
+    padding:8px 12px;
+    border-radius:6px;
+    cursor:pointer;
+    min-height:36px;
+  }
+  .toggle-btn:hover{ border-color:var(--cyan-dim); color:var(--cyan); }
+  .toggle-btn.active{ color:var(--green); border-color:var(--green); }
+
+  /* Side panel */
+  .panel{
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+  }
+
+  .zone-card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px;
+  }
+  .zone-title{
+    font-family:var(--mono);
+    font-size:10px;
+    letter-spacing:0.12em;
+    color:var(--text-dim);
+    margin-bottom:12px;
+  }
+
+  .zones{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:8px;
+  }
+  .zone{
+    background:var(--surface-2);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:12px 6px;
+    text-align:center;
+    transition:all .2s ease;
+  }
+  .zone-label{
+    font-family:var(--mono);
+    font-size:10px;
+    color:var(--text-dim);
+    letter-spacing:.06em;
+  }
+  .zone-state{
+    font-family:var(--mono);
+    font-size:13px;
+    font-weight:700;
+    margin-top:6px;
+    color:var(--green);
+  }
+  .zone.warn{ border-color:var(--amber); background:rgba(255,176,32,.08); }
+  .zone.warn .zone-state{ color:var(--amber); }
+  .zone.danger{ border-color:var(--red); background:rgba(255,71,87,.1); }
+  .zone.danger .zone-state{ color:var(--red); }
+
+  .zone-dist{
+    font-family:var(--mono);
+    font-size:10px;
+    color:var(--text-dim);
+    margin-top:4px;
+    letter-spacing:.02em;
+  }
+  .zone.warn .zone-dist{ color:var(--amber); opacity:.85; }
+  .zone.danger .zone-dist{ color:var(--red); opacity:.85; }
+
+  .zone-obj{
+    font-family:var(--mono);
+    font-size:10px;
+    color:var(--cyan);
+    margin-top:3px;
+    text-transform:uppercase;
+    letter-spacing:.03em;
+    min-height:12px;
+  }
+
+  .log-card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px;
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    min-height:220px;
+  }
+  .log-body{
+    font-family:var(--mono);
+    font-size:11.5px;
+    line-height:1.9;
+    overflow-y:auto;
+    flex:1;
+    max-height:260px;
+  }
+  .log-body::-webkit-scrollbar{ width:5px; }
+  .log-body::-webkit-scrollbar-thumb{ background:var(--line); border-radius:3px; }
+
+  .log-entry{ color:var(--text-dim); }
+  .log-entry.danger{ color:var(--red); }
+  .log-entry.warn{ color:var(--amber); }
+  .log-entry .t{ color:var(--text-dim); margin-right:8px; opacity:.6; }
+
+  .settings-card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px;
+  }
+  .setting-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--text-dim);
+    margin-bottom:10px;
+  }
+  .setting-row:last-child{ margin-bottom:0; }
+  .setting-row input[type=range]{ width:110px; accent-color:var(--cyan); }
+
+  footer{
+    max-width:1100px;
+    width:100%;
+    margin-top:24px;
+    font-family:var(--mono);
+    font-size:10.5px;
+    color:var(--text-dim);
+    text-align:center;
+    line-height:1.7;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark"></div>
+    <div>
+      <h1>PATH<span>SCAN</span></h1>
+      <div class="tagline">webcam obstacle scanner — vision shoe prototype</div>
+    </div>
+  </div>
+  <div class="status-chip" id="statusChip"><span class="dot"></span><span id="statusText">STANDBY</span></div>
+</header>
+
+<main>
+  <div class="viewport-card">
+    <div class="viewport-wrap">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas class="overlay" id="overlay"></canvas>
+      <div class="corner tl"></div>
+      <div class="corner tr"></div>
+      <div class="corner bl"></div>
+      <div class="corner br"></div>
+      <div class="placeholder" id="placeholder">
+        <div>Camera feed will appear here.<br>Mount angle: pointed at the ground ahead of the foot.</div>
+        <button class="start-btn" id="startBtn">▶ START SCANNING</button>
+      </div>
+    </div>
+    <div class="viewport-footer">
+      <span id="fpsText">-- fps · analysis idle</span>
+      <span id="modelStatusText" style="color:var(--text-dim);">🧠 loading model…</span>
+      <button class="toggle-btn" id="cameraToggle" title="Switch camera" style="display:none;">🔄 SWITCH CAM</button>
+      <button class="toggle-btn active" id="voiceToggle">🔊 VOICE ON</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="zone-card">
+      <div class="zone-title">PATH ZONES — LEFT / CENTER / RIGHT</div>
+      <div class="zones">
+        <div class="zone" id="zoneLeft"><div class="zone-label">LEFT</div><div class="zone-state">CLEAR</div><div class="zone-dist">-- m</div><div class="zone-obj" id="objLeft"></div></div>
+        <div class="zone" id="zoneCenter"><div class="zone-label">CENTER</div><div class="zone-state">CLEAR</div><div class="zone-dist">-- m</div><div class="zone-obj" id="objCenter"></div></div>
+        <div class="zone" id="zoneRight"><div class="zone-label">RIGHT</div><div class="zone-state">CLEAR</div><div class="zone-dist">-- m</div><div class="zone-obj" id="objRight"></div></div>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <div class="setting-row">
+        <span>SENSITIVITY</span>
+        <input type="range" id="sensSlider" min="10" max="90" value="45">
+      </div>
+      <div class="setting-row">
+        <span>ALERT COOLDOWN</span>
+        <input type="range" id="cooldownSlider" min="1" max="5" value="2">
+      </div>
+      <div class="setting-row">
+        <span>MOUNT HEIGHT <span id="heightVal">100cm</span></span>
+        <input type="range" id="heightSlider" min="20" max="160" value="100">
+      </div>
+      <div class="setting-row">
+        <span>MOUNT TILT <span id="tiltVal">55°</span></span>
+        <input type="range" id="tiltSlider" min="20" max="80" value="55">
+      </div>
+      <div class="setting-row">
+        <span>CAMERA FOV <span id="fovVal">55°</span></span>
+        <input type="range" id="fovSlider" min="40" max="80" value="55">
+      </div>
+    </div>
+
+    <div class="log-card">
+      <div class="zone-title">ALERT LOG</div>
+      <div class="log-body" id="logBody">
+        <div class="log-entry"><span class="t">--:--:--</span>waiting for scan start…</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Runs entirely in your browser — no video is uploaded or stored.<br>
+  Distance in meters is estimated from where an obstacle's edge appears in the frame, combined with your mount height, tilt, and field-of-view settings — not a true depth sensor. Accuracy depends on calibrating those settings to how the camera is actually worn.<br>
+  Object labels come from a general-purpose recognition model (~80 common object types) and require an internet connection the first time to download — after that it runs locally. Many real hazards (curbs, steps, poles, uneven ground) won't be named but are still caught by the edge/distance detector above.
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+
+<script>
+(function(){
+  const video = document.getElementById('video');
+  const overlay = document.getElementById('overlay');
+  const octx = overlay.getContext('2d');
+  const startBtn = document.getElementById('startBtn');
+  const placeholder = document.getElementById('placeholder');
+  const statusChip = document.getElementById('statusChip');
+  const statusText = document.getElementById('statusText');
+  const fpsText = document.getElementById('fpsText');
+  const modelStatusText = document.getElementById('modelStatusText');
+  const voiceToggle = document.getElementById('voiceToggle');
+  const sensSlider = document.getElementById('sensSlider');
+  const cooldownSlider = document.getElementById('cooldownSlider');
+  const heightSlider = document.getElementById('heightSlider');
+  const tiltSlider = document.getElementById('tiltSlider');
+  const fovSlider = document.getElementById('fovSlider');
+  const heightVal = document.getElementById('heightVal');
+  const tiltVal = document.getElementById('tiltVal');
+  const fovVal = document.getElementById('fovVal');
+  const logBody = document.getElementById('logBody');
+
+  heightSlider.addEventListener('input', () => heightVal.textContent = heightSlider.value + 'cm');
+  tiltSlider.addEventListener('input', () => tiltVal.textContent = tiltSlider.value + '°');
+  fovSlider.addEventListener('input', () => fovVal.textContent = fovSlider.value + '°');
+
+  const zoneEls = {
+    LEFT: document.getElementById('zoneLeft'),
+    CENTER: document.getElementById('zoneCenter'),
+    RIGHT: document.getElementById('zoneRight'),
+  };
+  const objEls = {
+    LEFT: document.getElementById('objLeft'),
+    CENTER: document.getElementById('objCenter'),
+    RIGHT: document.getElementById('objRight'),
+  };
+
+  let voiceOn = true;
+  let lastAlertTime = 0;
+  let running = false;
+
+  let cocoModel = null;
+  let modelStatus = 'loading'; // 'loading' | 'ready' | 'unavailable'
+  let zoneObjects = { LEFT: null, CENTER: null, RIGHT: null };
+  let loggedFirstDetectionPass = false;
+  let lastBoxesForOverlay = [];
+
+  async function loadDetectionModel(){
+    if (typeof cocoSsd === 'undefined'){
+      modelStatus = 'unavailable';
+      modelStatusText.textContent = '🧠 object ID unavailable';
+      modelStatusText.style.color = 'var(--red)';
+      log('object recognition script never loaded — check your internet connection, or an ad-blocker/firewall may be blocking cdn.jsdelivr.net', 'warn');
+      return;
+    }
+    try{
+      cocoModel = await cocoSsd.load();
+      modelStatus = 'ready';
+      modelStatusText.textContent = '🧠 object ID ready';
+      modelStatusText.style.color = 'var(--green)';
+      log('object recognition model ready');
+    } catch(err){
+      modelStatus = 'unavailable';
+      modelStatusText.textContent = '🧠 object ID unavailable';
+      modelStatusText.style.color = 'var(--red)';
+      log('object recognition model downloaded the script but failed to load its weights — ' + err.message, 'warn');
+      console.error('coco-ssd load error:', err);
+    }
+  }
+  loadDetectionModel();
+
+  function zoneOfMirroredX(mirroredX, frameW){
+    return Math.min(2, Math.max(0, Math.floor(mirroredX / (frameW / 3))));
+  }
+
+  // Cross-class Non-Max Suppression. coco-ssd only suppresses duplicates
+  // *within* a class, so the same real-world object can come back as two
+  // or three overlapping boxes with different labels/scores (e.g. a chair
+  // also flagged as "bench"). Left unfiltered, those duplicates can spread
+  // across multiple zone columns and make it look like the same object is
+  // "everywhere". This keeps only the highest-scoring box in each cluster
+  // of heavily-overlapping boxes, regardless of class.
+  function iou(a, b){
+    const [ax, ay, aw, ah] = a.bbox, [bx, by, bw, bh] = b.bbox;
+    const x1 = Math.max(ax, bx), y1 = Math.max(ay, by);
+    const x2 = Math.min(ax+aw, bx+bw), y2 = Math.min(ay+ah, by+bh);
+    const iw = Math.max(0, x2-x1), ih = Math.max(0, y2-y1);
+    const inter = iw*ih;
+    const union = aw*ah + bw*bh - inter;
+    return union > 0 ? inter/union : 0;
+  }
+  function crossClassNMS(preds, iouThresh){
+    const sorted = [...preds].sort((a,b) => b.score - a.score);
+    const kept = [];
+    sorted.forEach(p => {
+      const overlapsKept = kept.some(k => iou(k, p) > iouThresh);
+      if (!overlapsKept) kept.push(p);
+    });
+    return kept;
+  }
+
+  // A shoe/waist-mounted camera aimed at the path ahead should only ever
+  // see *other* people at a normal walking distance — never a person
+  // filling most of the frame. When that happens it's almost always the
+  // wearer's own body, a hand adjusting the camera, or someone standing
+  // right in front of the lens by accident, not a genuine "obstacle" 5cm
+  // away. This is why "person" was drowning out every other label: one
+  // huge, high-confidence person box was winning the "nearest" comparison
+  // in every zone it touched. We flag (and exclude from zone labels)
+  // any box — of any class — that covers an implausible share of the frame.
+  const MAX_BOX_AREA_RATIO = 0.55;   // box area vs full frame area
+  const MAX_BOX_HEIGHT_RATIO = 0.85; // box height vs frame height
+  function isImplausiblyClose(p, frameW, frameH){
+    const [ , , bw, bh] = p.bbox;
+    const areaRatio = (bw*bh) / (frameW*frameH);
+    const heightRatio = bh / frameH;
+    return areaRatio > MAX_BOX_AREA_RATIO || heightRatio > MAX_BOX_HEIGHT_RATIO;
+  }
+
+  let loggedSelfFilter = false;
+
+  async function detectObjects(){
+    if (modelStatus !== 'ready' || !running || video.videoWidth === 0) return;
+    let rawPreds;
+    try{
+      rawPreds = await cocoModel.detect(video);
+    } catch(err){
+      console.error('coco-ssd detect error:', err);
+      return; // transient — skip this cycle
+    }
+
+    const frameW = video.videoWidth, frameH = video.videoHeight;
+
+    // 1. minimum confidence (person needs a higher bar — it's the class
+    //    most prone to false positives against clothing/shadow/edges)
+    let preds = rawPreds.filter(p => p.score >= (p.class === 'person' ? 0.6 : 0.45));
+
+    // 2. drop duplicate overlapping boxes across classes
+    preds = crossClassNMS(preds, 0.5);
+
+    // 3. drop boxes that are implausibly large to be a real path obstacle
+    const selfFiltered = preds.filter(p => isImplausiblyClose(p, frameW, frameH));
+    preds = preds.filter(p => !isImplausiblyClose(p, frameW, frameH));
+
+    if (selfFiltered.length && !loggedSelfFilter){
+      loggedSelfFilter = true;
+      log('ignoring ' + selfFiltered[0].class + ' filling most of the frame (likely the camera wearer, not a path obstacle) — reposition the camera if this is wrong', 'warn');
+    }
+
+    if (!loggedFirstDetectionPass){
+      loggedFirstDetectionPass = true;
+      if (preds.length === 0){
+        log('object model is running but hasn\'t recognized anything in view yet');
+      } else {
+        const summary = preds.map(p => `${p.class} (${Math.round(p.score*100)}%)`).join(', ');
+        log('object model sees: ' + summary);
+      }
+    }
+
+    const zoneNearest = { LEFT: Infinity, CENTER: Infinity, RIGHT: Infinity };
+    const nextZoneObjects = { LEFT: null, CENTER: null, RIGHT: null };
+    const boxesForOverlay = [];
+
+    preds.forEach(p => {
+      const [x, y, bw, bh] = p.bbox;
+      // video is displayed mirrored (CSS scaleX(-1)); flip x so zones line
+      // up with what the user sees on screen and with the LEFT/CENTER/RIGHT
+      // edge-based zones computed elsewhere.
+      const mirroredLeft = frameW - (x + bw);
+      const mirroredRight = frameW - x;
+      const bottomRow = y + bh; // point where the object meets the ground
+      const distM = rowToDistanceMeters(bottomRow, frameH);
+      const effectiveDist = isFinite(distM) ? distM : (1000 - p.score); // fallback ranking if off-horizon
+
+      boxesForOverlay.push({ mirroredLeft, mirroredRight, y, bh, label: p.class, score: p.score, frameW, frameH });
+
+      // assign to every zone column the box actually spans, not just the
+      // one under its center — a wide object (e.g. a bench) can genuinely
+      // straddle two zones, and this also stops a single box from being
+      // "lost" if its center sits right on a zone boundary.
+      const zoneStartIdx = zoneOfMirroredX(mirroredLeft, frameW);
+      const zoneEndIdx = zoneOfMirroredX(mirroredRight, frameW);
+      for (let zi = zoneStartIdx; zi <= zoneEndIdx; zi++){
+        const zoneName = ['LEFT', 'CENTER', 'RIGHT'][zi];
+        if (effectiveDist < zoneNearest[zoneName]){
+          zoneNearest[zoneName] = effectiveDist;
+          nextZoneObjects[zoneName] = p.class;
+        }
+      }
+    });
+
+    zoneObjects = nextZoneObjects;
+    ['LEFT', 'CENTER', 'RIGHT'].forEach(name => {
+      objEls[name].textContent = zoneObjects[name] || '';
+    });
+    lastBoxesForOverlay = boxesForOverlay;
+  }
+
+  // small offscreen canvas for fast pixel analysis
+  const proc = document.createElement('canvas');
+  const pctx = proc.getContext('2d', { willReadFrequently: true });
+  const PROC_W = 160, PROC_H = 120;
+  proc.width = PROC_W; proc.height = PROC_H;
+
+  voiceToggle.addEventListener('click', () => {
+    voiceOn = !voiceOn;
+    voiceToggle.textContent = voiceOn ? '🔊 VOICE ON' : '🔇 VOICE OFF';
+    voiceToggle.classList.toggle('active', voiceOn);
+  });
+
+  function log(msg, level){
+    const time = new Date().toLocaleTimeString('en-GB');
+    const div = document.createElement('div');
+    div.className = 'log-entry' + (level ? ' ' + level : '');
+    div.innerHTML = `<span class="t">${time}</span>${msg}`;
+    logBody.appendChild(div);
+    logBody.scrollTop = logBody.scrollHeight;
+    while (logBody.children.length > 60) logBody.removeChild(logBody.firstChild);
+  }
+
+  function speak(text){
+    if (!voiceOn || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.05;
+    window.speechSynthesis.speak(u);
+  }
+
+  function setZoneState(zone, state, distanceM){
+    const el = zoneEls[zone];
+    const label = el.querySelector('.zone-state');
+    const dist = el.querySelector('.zone-dist');
+    el.classList.remove('warn', 'danger');
+    if (state === 'CLOSE'){ el.classList.add('danger'); label.textContent = 'CLOSE'; }
+    else if (state === 'NEAR'){ el.classList.add('warn'); label.textContent = 'NEAR'; }
+    else { label.textContent = 'CLEAR'; }
+    dist.textContent = (distanceM != null && isFinite(distanceM)) ? distanceM.toFixed(1) + ' m' : '-- m';
+  }
+
+  // Converts a pixel row in the analysis frame into an estimated ground
+  // distance (meters) using a simple pinhole/ground-plane model. This
+  // assumes the camera is mounted at a known height, tilted downward by a
+  // known angle, with a known vertical field of view. It's an estimate,
+  // not a measurement from a real depth sensor.
+  function rowToDistanceMeters(absRow, frameH){
+    const heightM = parseFloat(heightSlider.value) / 100;
+    const tiltRad = parseFloat(tiltSlider.value) * Math.PI / 180;
+    const fovRad = parseFloat(fovSlider.value) * Math.PI / 180;
+
+    // v: -1 at top of frame, 0 at center, +1 at bottom of frame
+    const v = (absRow - frameH / 2) / (frameH / 2);
+    const rayAngle = v * (fovRad / 2);       // offset from the camera's center axis
+    const phi = tiltRad + rayAngle;          // angle below horizontal for this ray
+    if (phi <= 0.02) return Infinity;        // ray points at/above horizon — no ground intersection
+    return heightM / Math.tan(phi);
+  }
+
+  const cameraToggle = document.getElementById('cameraToggle');
+  let currentStream = null;
+  let cameraDevices = [];   // enumerated after first permission grant
+  let currentDeviceIdx = -1;
+
+  // 'facingMode: environment' is only a *hint*. Many laptops have exactly
+  // one camera (front-facing) and silently ignore it, which is the classic
+  // reason this app kept reporting "person" everywhere — it was pointed at
+  // the wearer's own face the whole time. Once we have permission we can
+  // enumerate real devices and actively pick one whose label suggests a
+  // rear/back/environment lens, and expose a manual switch button as a
+  // fallback for phones/laptops that label cameras ambiguously.
+  async function pickBestDeviceId(){
+    try{
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      cameraDevices = devices.filter(d => d.kind === 'videoinput');
+      if (cameraDevices.length === 0) return null;
+      const rearIdx = cameraDevices.findIndex(d => /back|rear|environment/i.test(d.label));
+      currentDeviceIdx = rearIdx !== -1 ? rearIdx : 0;
+      return cameraDevices[currentDeviceIdx].deviceId;
+    } catch(err){
+      return null;
+    }
+  }
+
+  async function openCamera(deviceId){
+    if (currentStream){
+      currentStream.getTracks().forEach(t => t.stop());
+    }
+    const constraints = deviceId
+      ? { video: { deviceId: { exact: deviceId }, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false }
+      : { video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    currentStream = stream;
+    video.srcObject = stream;
+    await video.play();
+    resizeOverlay();
+  }
+
+  async function startCamera(){
+    try{
+      // Request generic access first so enumerateDevices() returns real
+      // labels (browsers hide labels until permission is granted).
+      await openCamera(null);
+      const bestId = await pickBestDeviceId();
+      if (bestId){
+        try{ await openCamera(bestId); } catch(e){ /* keep the already-working stream */ }
+      }
+      placeholder.classList.add('hidden');
+      statusChip.classList.add('live');
+      statusText.textContent = 'SCANNING';
+      running = true;
+      cameraToggle.style.display = cameraDevices.length > 1 ? 'inline-block' : 'none';
+      const chosenLabel = (currentDeviceIdx >= 0 && cameraDevices[currentDeviceIdx]) ? cameraDevices[currentDeviceIdx].label : 'default camera';
+      log('camera stream started — ' + (chosenLabel || 'default camera'));
+      if (cameraDevices.length > 1 && !/back|rear|environment/i.test(chosenLabel || '')){
+        log('couldn\'t confirm a rear-facing camera is in use — if the feed shows you rather than the path ahead, tap SWITCH CAM', 'warn');
+      }
+      requestAnimationFrame(loop);
+    } catch(err){
+      log('camera access failed — ' + err.message, 'danger');
+      statusText.textContent = 'CAMERA ERROR';
+      alert('Could not access the camera. Please allow camera permissions and use https or localhost.');
+    }
+  }
+
+  cameraToggle.addEventListener('click', async () => {
+    if (cameraDevices.length < 2) return;
+    currentDeviceIdx = (currentDeviceIdx + 1) % cameraDevices.length;
+    try{
+      await openCamera(cameraDevices[currentDeviceIdx].deviceId);
+      log('switched camera — ' + (cameraDevices[currentDeviceIdx].label || 'camera ' + (currentDeviceIdx+1)));
+    } catch(err){
+      log('could not switch camera — ' + err.message, 'warn');
+    }
+  });
+
+  startBtn.addEventListener('click', startCamera);
+  setInterval(detectObjects, 600);
+
+  function resizeOverlay(){
+    overlay.width = overlay.clientWidth;
+    overlay.height = overlay.clientHeight;
+  }
+  window.addEventListener('resize', resizeOverlay);
+
+  let lastFrameTime = performance.now();
+  let frameCount = 0;
+  let lastFpsUpdate = performance.now();
+
+  function loop(now){
+    if (!running) return;
+    frameCount++;
+    if (now - lastFpsUpdate > 500){
+      const fps = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
+      fpsText.textContent = fps + ' fps · analyzing path zone';
+      frameCount = 0;
+      lastFpsUpdate = now;
+    }
+    analyzeFrame(now);
+    requestAnimationFrame(loop);
+  }
+
+  function analyzeFrame(now){
+    if (video.videoWidth === 0) return;
+
+    // draw downscaled + mirrored frame for analysis
+    pctx.save();
+    pctx.translate(PROC_W, 0);
+    pctx.scale(-1, 1);
+    pctx.drawImage(video, 0, 0, PROC_W, PROC_H);
+    pctx.restore();
+
+    const roiTop = Math.floor(PROC_H * 0.45);
+    const roiH = PROC_H - roiTop;
+    const imgData = pctx.getImageData(0, roiTop, PROC_W, roiH);
+    const data = imgData.data;
+
+    const thirdW = Math.floor(PROC_W / 3);
+    const edgeSum = [0, 0, 0];        // left, center, right — for the overlay heat
+    const zoneMaxRow = [-1, -1, -1];  // furthest-down (= nearest) edge row seen per zone
+    const zoneEdgeCount = [0, 0, 0];  // how many qualifying pixels, to avoid noise triggers
+
+    // simple horizontal gradient "edge energy" per pixel, per zone
+    for (let y = 1; y < roiH - 1; y++){
+      for (let x = 1; x < PROC_W - 1; x++){
+        const i = (y * PROC_W + x) * 4;
+        const iL = (y * PROC_W + (x - 1)) * 4;
+        const iR = (y * PROC_W + (x + 1)) * 4;
+        const iU = ((y - 1) * PROC_W + x) * 4;
+        const iD = ((y + 1) * PROC_W + x) * 4;
+
+        const gray = (data[i] + data[i+1] + data[i+2]) / 3;
+        const grayL = (data[iL] + data[iL+1] + data[iL+2]) / 3;
+        const grayR = (data[iR] + data[iR+1] + data[iR+2]) / 3;
+        const grayU = (data[iU] + data[iU+1] + data[iU+2]) / 3;
+        const grayD = (data[iD] + data[iD+1] + data[iD+2]) / 3;
+
+        const gx = Math.abs(grayR - grayL);
+        const gy = Math.abs(grayD - grayU);
+        const g = gx + gy;
+
+        if (g > 40){
+          // weight closer rows (nearer bottom = nearer to foot) more heavily
+          const proximityWeight = 1 + (y / roiH) * 1.5;
+          const zoneIdx = Math.min(2, Math.floor(x / thirdW));
+          edgeSum[zoneIdx] += g * proximityWeight;
+          zoneEdgeCount[zoneIdx]++;
+          if (y > zoneMaxRow[zoneIdx]) zoneMaxRow[zoneIdx] = y;
+        }
+      }
+    }
+
+    // sensitivity now sets the *range* (in meters) at which zones go NEAR / CLOSE
+    const sens = parseInt(sensSlider.value, 10);
+    const nearThresholdM = 0.5 + (sens / 100) * 2.5;   // ~0.75m .. 3.0m
+    const closeThresholdM = nearThresholdM * 0.4;       // roughly the inner half of that range
+    const MIN_EDGE_PIXELS = 6; // require a handful of edge pixels before trusting a reading
+
+    const zoneNames = ['LEFT', 'CENTER', 'RIGHT'];
+    const zoneDistances = [null, null, null];
+    const zoneStates = ['CLEAR', 'CLEAR', 'CLEAR'];
+    let worstZone = null, worstLevel = 0, worstDist = null;
+
+    zoneNames.forEach((name, idx) => {
+      let distM = null;
+      if (zoneEdgeCount[idx] >= MIN_EDGE_PIXELS){
+        const absRow = roiTop + zoneMaxRow[idx];
+        distM = rowToDistanceMeters(absRow, PROC_H);
+        if (!isFinite(distM)) distM = null;
+      }
+      zoneDistances[idx] = distM;
+
+      let state = 'CLEAR';
+      let level = 0;
+      if (distM != null && distM <= closeThresholdM){ state = 'CLOSE'; level = 2; }
+      else if (distM != null && distM <= nearThresholdM){ state = 'NEAR'; level = 1; }
+      zoneStates[idx] = state;
+      setZoneState(name, state, distM);
+      if (level > worstLevel){ worstLevel = level; worstZone = name; worstDist = distM; }
+    });
+
+    drawOverlay(zoneStates, zoneDistances, roiTop / PROC_H);
+
+    const cooldownMs = parseInt(cooldownSlider.value, 10) * 1000;
+    if (worstZone && now - lastAlertTime > cooldownMs){
+      lastAlertTime = now;
+      const distText = worstDist != null ? `${worstDist.toFixed(1)} meters` : '';
+      const objName = zoneObjects[worstZone]; // e.g. "chair", "person" — null if unrecognized
+      const thing = objName ? objName.charAt(0).toUpperCase() + objName.slice(1) : 'Obstacle';
+      if (worstLevel === 2){
+        speak(`${thing} ${worstZone.toLowerCase()}, ${distText}, very close.`);
+        log(`${thing.toLowerCase()} detected — <b>${worstZone}</b> — CLOSE — ${distText}`, 'danger');
+      } else {
+        speak(`${thing} ahead, ${worstZone.toLowerCase()}, ${distText}.`);
+        log(`${thing.toLowerCase()} detected — ${worstZone} — near — ${distText}`, 'warn');
+      }
+    }
+  }
+
+  function drawOverlay(zoneStates, zoneDistances, roiTopRatio){
+    const w = overlay.width, h = overlay.height;
+    octx.clearRect(0, 0, w, h);
+
+    const roiY = h * roiTopRatio;
+    // path zone line
+    octx.strokeStyle = 'rgba(0,217,192,0.55)';
+    octx.lineWidth = 1;
+    octx.setLineDash([5,4]);
+    octx.beginPath();
+    octx.moveTo(0, roiY);
+    octx.lineTo(w, roiY);
+    octx.stroke();
+    octx.setLineDash([]);
+
+    const thirdW = w / 3;
+    for (let i = 0; i < 3; i++){
+      const state = zoneStates[i];
+      let color = 'rgba(61,220,132,0.0)';
+      let border = 'rgba(61,220,132,0.25)';
+      if (state === 'CLOSE'){ color = 'rgba(255,71,87,0.16)'; border='rgba(255,71,87,0.65)'; }
+      else if (state === 'NEAR'){ color = 'rgba(255,176,32,0.13)'; border='rgba(255,176,32,0.55)'; }
+
+      octx.fillStyle = color;
+      octx.fillRect(i * thirdW, roiY, thirdW, h - roiY);
+      octx.strokeStyle = border;
+      octx.lineWidth = 1;
+      octx.strokeRect(i * thirdW + 1, roiY + 1, thirdW - 2, h - roiY - 2);
+
+      // distance label for this zone
+      const distM = zoneDistances[i];
+      const zoneName = ['LEFT', 'CENTER', 'RIGHT'][i];
+      const objName = zoneObjects[zoneName];
+      const labelColor = state === 'CLOSE' ? 'rgba(255,71,87,0.9)' : state === 'NEAR' ? 'rgba(255,176,32,0.9)' : 'rgba(231,237,243,0.7)';
+      octx.textAlign = 'center';
+      if (distM != null){
+        octx.font = '11px "JetBrains Mono", monospace';
+        octx.fillStyle = labelColor;
+        octx.fillText(distM.toFixed(1) + ' m', i * thirdW + thirdW / 2, roiY + 16);
+      }
+      if (objName){
+        octx.font = '10px "JetBrains Mono", monospace';
+        octx.fillStyle = 'rgba(0,217,192,0.85)';
+        octx.fillText(objName.toUpperCase(), i * thirdW + thirdW / 2, roiY + (distM != null ? 30 : 16));
+      }
+    }
+
+    drawDetectionBoxes(w, h);
+  }
+
+  // Draws every raw box the object model currently believes it sees,
+  // scaled from analysis-frame coordinates to the overlay canvas. This is
+  // what makes mislabeled detections visible/debuggable instead of a
+  // black box — if something is wrongly tagged, you can see exactly which
+  // box and score caused it.
+  function drawDetectionBoxes(canvasW, canvasH){
+    lastBoxesForOverlay.forEach(b => {
+      const sx = canvasW / b.frameW, sy = canvasH / b.frameH;
+      const left = b.mirroredLeft * sx;
+      const boxW = (b.mirroredRight - b.mirroredLeft) * sx;
+      const top = b.y * sy;
+      const boxH = b.bh * sy;
+
+      octx.strokeStyle = 'rgba(0,217,192,0.9)';
+      octx.lineWidth = 1.5;
+      octx.strokeRect(left, top, boxW, boxH);
+
+      const tag = `${b.label} ${Math.round(b.score*100)}%`;
+      octx.font = '10px "JetBrains Mono", monospace';
+      const tw = octx.measureText(tag).width;
+      octx.fillStyle = 'rgba(0,217,192,0.9)';
+      octx.fillRect(left, Math.max(0, top - 13), tw + 6, 13);
+      octx.fillStyle = '#001612';
+      octx.textAlign = 'left';
+      octx.fillText(tag, left + 3, Math.max(10, top - 3));
+      octx.textAlign = 'center';
+    });
+  }
+})();
+</script>
+
+</body>
+</html>
